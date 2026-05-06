@@ -31,9 +31,6 @@
       display: flex !important;
       align-items: center !important;
       justify-content: center !important;
-      position: fixed !important;
-      top: 0 !important;
-      left: 0 !important;
     }
 
     #GameDiv {
@@ -64,18 +61,21 @@
 <script src="src/import-map.json" type="systemjs-importmap" charset="utf-8"> </script>
 <script>
 (function() {
+    var container = document.getElementById('GameDiv');
+    var GAME_WIDTH = 1280;
+    var GAME_HEIGHT = 720;
+    
     function doScale() {
-        var container = document.getElementById('GameDiv');
         var w = window.innerWidth;
         var h = window.innerHeight;
         
-        var gameW = 1280;
-        var gameH = 720;
+        var isPortrait = h > w;
         
-        var scale = h / gameH;
-        
-        if (gameW * scale > w) {
-            scale = w / gameW;
+        var scale;
+        if (isPortrait) {
+            scale = h / GAME_HEIGHT;
+        } else {
+            scale = w / GAME_WIDTH;
         }
         
         container.style.transform = 'scale(' + scale + ')';
@@ -86,11 +86,11 @@
     var resizeTimer;
     window.addEventListener('resize', function() {
         clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(doScale, 100);
+        resizeTimer = setTimeout(doScale, 50);
     });
     
     window.addEventListener('orientationchange', function() {
-        setTimeout(doScale, 200);
+        setTimeout(doScale, 100);
     });
 })();
 
