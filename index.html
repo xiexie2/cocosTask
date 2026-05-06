@@ -69,9 +69,14 @@
         var w = window.innerWidth;
         var h = window.innerHeight;
         
-        var scaleX = w / 1280;
-        var scaleY = h / 720;
-        var scale = Math.min(scaleX, scaleY);
+        var gameW = 1280;
+        var gameH = 720;
+        
+        var scale = h / gameH;
+        
+        if (gameW * scale > w) {
+            scale = w / gameW;
+        }
         
         container.style.transform = 'scale(' + scale + ')';
     }
