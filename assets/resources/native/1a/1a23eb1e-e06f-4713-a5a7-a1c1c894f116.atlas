@@ -1,0 +1,20 @@
+
+Boy3.png
+size: 438,456
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+n3_1
+  rotate: false
+  xy: 221, 235
+  size: 215, 219
+  orig: 215, 219
+  offset: 0, 0
+  index: -1
+n3_2
+  rotate: false
+  xy: 2, 2
+  size: 217, 452
+  orig: 217, 452
+  offset: 0, 0
+  index: -1
