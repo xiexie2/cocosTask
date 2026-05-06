@@ -2,99 +2,69 @@
 <html>
 <head>
   <meta charset="utf-8">
+
   <title>Cocos Creator | HuaDongQiFei</title>
-  <meta name="viewport" content="width=device-width,user-scalable=no,initial-scale=1,minimum-scale=1,maximum-scale=1,minimal-ui=true"/>
+
+  <meta name="viewport"
+        content="width=device-width,user-scalable=no,initial-scale=1,minimum-scale=1,maximum-scale=1,minimal-ui=true"/>
+
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="format-detection" content="telephone=no">
+
   <meta name="renderer" content="webkit"/>
   <meta name="force-rendering" content="webkit"/>
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
   <meta name="msapplication-tap-highlight" content="no">
+
   <meta name="full-screen" content="yes"/>
   <meta name="x5-fullscreen" content="true"/>
   <meta name="360-fullscreen" content="true"/>
+
   <meta name="x5-page-mode" content="app">
+
   <link rel="stylesheet" type="text/css" href="style.css"/>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    
-    html, body {
-      width: 100%;
-      height: 100%;
+    body {
+      align-items: center;
+      justify-content: center;
       overflow: hidden;
       background: #000;
     }
-    
-    body {
-      display: flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-    }
 
     #GameDiv {
-      position: relative !important;
-      width: 1280px !important;
-      height: 720px !important;
-      flex: 0 0 auto !important;
+      position: relative;
+      width: min(100vw, 56.2219vh, 750px);
+      height: min(100vh, 177.8667vw, 1334px);
+      aspect-ratio: 750 / 1334;
+      flex: 0 0 auto;
       overflow: hidden;
-      transform-origin: center center;
     }
 
     #Cocos3dGameContainer,
     #GameCanvas {
-      width: 100% !important;
-      height: 100% !important;
+      width: 100%;
+      height: 100%;
     }
   </style>
+
 </head>
 <body>
   <div id="GameDiv" cc_exact_fit_screen="true">
-    <div id="Cocos3dGameContainer">
-      <canvas id="GameCanvas" oncontextmenu="event.preventDefault()" tabindex="99"></canvas>
+      <div id="Cocos3dGameContainer">
+        <canvas id="GameCanvas" oncontextmenu="event.preventDefault()" tabindex="99"></canvas>
+      </div>
     </div>
-  </div>
+  
 
 <script src="src/polyfills.bundle.js" charset="utf-8"> </script>
 <script src="src/system.bundle.js" charset="utf-8"> </script>
 <script src="src/import-map.json" type="systemjs-importmap" charset="utf-8"> </script>
-<script>
-(function() {
-    var container = document.getElementById('GameDiv');
-    var GAME_WIDTH = 1280;
-    var GAME_HEIGHT = 720;
-    
-    function doScale() {
-        var w = window.innerWidth;
-        var h = window.innerHeight;
-        
-        var isPortrait = h > w;
-        
-        var scale;
-        if (isPortrait) {
-            scale = h / GAME_HEIGHT;
-        } else {
-            scale = w / GAME_WIDTH;
-        }
-        
-        container.style.transform = 'scale(' + scale + ')';
-    }
-    
-    doScale();
-    
-    var resizeTimer;
-    window.addEventListener('resize', function() {
-        clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(doScale, 50);
-    });
-    
-    window.addEventListener('orientationchange', function() {
-        setTimeout(doScale, 100);
-    });
-})();
 
-System.import('./index.js').catch(function(err) { console.error(err); })
+<script>
+    System.import('./index.js').catch(function(err) { console.error(err); })
 </script>
+
 </body>
 </html>
