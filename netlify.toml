@@ -1,0 +1,8 @@
+[build]
+  publish = "build/web-mobile"
+  command = ""
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "no-cache"

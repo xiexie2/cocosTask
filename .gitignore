@@ -1,0 +1,35 @@
+# Cocos Creator
+library/
+local/
+temp/
+build/
+profiles/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+debug.log
+*.log
+
+# Node
+node_modules/
+
+# Build output (keep mraid-package)
+build/
+
+# Temp files
+*.tmp
+*.bak
+
+# Docs (user didn't ask for these)
+*.md
+!README.md

@@ -1,0 +1,18 @@
+{
+  "__version__": "1.0.6",
+  "custom_joint": "",
+  "custom_material": "",
+  "custom_pipeline": "",
+  "designResolution": {
+    "width": 750,
+    "height": 1334,
+    "fitWidth": false,
+    "fitHeight": true
+  },
+  "general": {
+    "designResolution": {
+      "width": 740,
+      "height": 1334
+    }
+  }
+}
