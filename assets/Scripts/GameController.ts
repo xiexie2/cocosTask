@@ -23,6 +23,9 @@ export class GameController extends Component {
     noButton: Node = null!;
     
     @property(Node)
+    btnTest: Node = null!;
+    
+    @property(Node)
     xiangshang: Node = null!;
     
     @property(Node)
@@ -57,7 +60,10 @@ export class GameController extends Component {
     
     @property(Node)
     heimu: Node = null!;
-    
+
+    @property(Node)
+    btnIcon: Node = null!;
+
     @property(Node)
     yz: Node = null!;
     
@@ -72,6 +78,9 @@ export class GameController extends Component {
 
     private cachedTouXiang: { [key: number]: SpriteFrame } = {};
     private cachedName: { [key: string]: SpriteFrame } = {};
+    private xiangshangColorIndex: number = 0;
+    private xiangshangSprites: Sprite[] = [];
+    private xiangshangFrames: SpriteFrame[] = [];
     private currentNameIndex: number = -1;
     private bodyPrefabCache: { [key: number]: Prefab | null } = {};
     private bodyLoadingPromises: { [key: number]: Promise<Prefab | null> } = {};
@@ -88,12 +97,14 @@ export class GameController extends Component {
     private dimianPosition: Vec3 = new Vec3();
     private yinziPosition: Vec3 = new Vec3();
     private isMoving: boolean = false;
+    private isGirlWalking: boolean = false;
+    private canSwipe: boolean = true;
     private movePhase: number = 0;
     private moveSpeed: number = 0;
-    private maxSpeed: number = 2000;
-    private fastSpeed: number = 4000;
-    private acceleration: number = 3000;
-    private deceleration: number = 1500;
+    private maxSpeed: number = 3500;
+    private fastSpeed: number = 6500;
+    private acceleration: number = 5500;
+    private deceleration: number = 2500;
     private bgHeight: number = 1334;
     private moveDistance: number = 0;
     private totalMoveDistance: number = 0;
@@ -112,8 +123,9 @@ export class GameController extends Component {
     private idleTimer: number = 0;
     private idleTimeout: number = 6;
     private lastBodyPosition: Vec3 = new Vec3();
-    private hasOpenedUrl: boolean = false;
+    private storeLinkCooldown: boolean = false;
     private isFirstBodyGuided: boolean = false;
+    private bodyExtraYOffset: number = 0;
     private bgmAudioSource: AudioSource = null!;
     private readonly designWidth: number = 750;
     private readonly designHeight: number = 1334;
@@ -126,6 +138,7 @@ export class GameController extends Component {
         this.preloadAllBodies();
         this.preloadAllTouXiang();
         this.preloadAllNames();
+        this.startButtonScaleAnim();
     }
 
     onDestroy() {
@@ -146,22 +159,17 @@ export class GameController extends Component {
             window.addEventListener('resize', this.applyPortraitViewport);
             window.addEventListener('orientationchange', this.applyPortraitViewport);
         }
-        
-        console.log('Screen adapter setup complete');
     }
 
     onScreenResize() {
         view.setDesignResolutionSize(this.designWidth, this.designHeight, ResolutionPolicy.SHOW_ALL);
         this.applyPortraitViewport();
-        const visibleSize = view.getVisibleSize();
-        console.log(`Window resized to: ${visibleSize.width}x${visibleSize.height}`);
         this.updateOrientation();
     }
 
     updateOrientation() {
         const visibleSize = view.getVisibleSize();
         this.isLandscape = visibleSize.width > visibleSize.height;
-        console.log(`Screen size: ${visibleSize.width}x${visibleSize.height}, Landscape: ${this.isLandscape}`);
     }
 
     private applyPortraitViewport = () => {
@@ -175,9 +183,8 @@ export class GameController extends Component {
         const topOffset = Math.max(0, canvas.getBoundingClientRect().top);
         const availableWidth = window.innerWidth;
         const availableHeight = Math.max(1, window.innerHeight - topOffset);
-        const scale = Math.min(availableWidth / this.designWidth, availableHeight / this.designHeight);
-        const width = Math.floor(this.designWidth * scale);
-        const height = Math.floor(this.designHeight * scale);
+        const width = Math.floor(availableWidth);
+        const height = Math.floor(availableHeight);
         const frameStyle = canvas.parentElement?.style;
         const gameDivStyle = canvas.parentElement?.parentElement?.style;
         const viewWithFrameSize = view as unknown as { setFrameSize?: (width: number, height: number) => void };
@@ -214,17 +221,10 @@ export class GameController extends Component {
     };
 
     playBackgroundMusic() {
-        console.log('Loading background music from: mp3/bgyy');
-        
         resources.load('mp3/bgyy', AudioClip, (err, clip) => {
             if (err) {
-                console.warn('Background music load failed, trying alternative path...');
                 resources.load('mp3/bgyy/mp3', AudioClip, (err2, clip2) => {
-                    if (err2) {
-                        console.error('Failed to load background music from all paths:', err2);
-                        return;
-                    }
-                    this.initAndPlayBGM(clip2);
+                    if (!err2 && clip2) this.initAndPlayBGM(clip2);
                 });
                 return;
             }
@@ -239,7 +239,6 @@ export class GameController extends Component {
             this.bgmAudioSource.loop = true;
             this.bgmAudioSource.volume = 0.5;
             this.bgmAudioSource.play();
-            console.log('Background music started playing (loop)');
         }
     }
 
@@ -264,8 +263,11 @@ export class GameController extends Component {
                 this.startHandFloat();
             }
         }
-        if (this.xiangshang) this.xiangshang.active = true;
-        this.startXiangshangGlow();
+        if (this.xiangshang) {
+            this.xiangshang.active = true;
+            this.initXiangshangColor();
+            this.schedule(() => this.xiangshangColorCycle(), 0.6);
+        }
         
         if (this.big) this.big.active = false;
         if (this.heimu) this.heimu.active = false;
@@ -273,78 +275,96 @@ export class GameController extends Component {
         this.resetIdleTimer();
     }
 
-    startXiangshangGlow() {
-        if (!this.xiangshang) return;
-        
-        const uiTransform = this.xiangshang.getComponent(UITransform);
-        const height = uiTransform ? uiTransform.height : 100;
-        
-        if (this.xiangshang.children.length > 0) {
-            const glowNode = this.xiangshang.children[0];
-            const glowHeight = glowNode.getComponent(UITransform)?.height || 50;
-            const startY = -height / 2 - glowHeight;
-            const endY = height / 2 + glowHeight;
-            
-            glowNode.setPosition(glowNode.getPosition().x, startY, glowNode.getPosition().z);
-            
-            tween(glowNode)
-                .to(1.5, { position: new Vec3(glowNode.getPosition().x, endY, glowNode.getPosition().z) }, { easing: 'linear' })
-                .call(() => {
-                    glowNode.setPosition(glowNode.getPosition().x, startY, glowNode.getPosition().z);
-                })
-                .union()
-                .repeatForever()
-                .start();
-            
-            console.log('Xiangshang glow animation started');
-        } else {
-            console.log('No glow child found under xiangshang, please add a glow sprite as child');
-        }
-    }
-
-
     resetIdleTimer() {
         this.idleTimer = 0;
     }
 
+    startButtonScaleAnim() {
+        const duration = 0.6;
+        if (this.okButton) {
+            tween(this.okButton)
+                .to(duration, { scale: new Vec3(1.1, 1.1, 1) }, { easing: 'sineInOut' })
+                .to(duration, { scale: new Vec3(0.9, 0.9, 1) }, { easing: 'sineInOut' })
+                .union()
+                .repeatForever()
+                .start();
+        }
+        if (this.noButton) {
+            tween(this.noButton)
+                .to(duration, { scale: new Vec3(1.1, 1.1, 1) }, { easing: 'sineInOut' })
+                .to(duration, { scale: new Vec3(0.9, 0.9, 1) }, { easing: 'sineInOut' })
+                .union()
+                .repeatForever()
+                .start();
+        }
+    }
+
     showHandAndXiangshang() {
-        console.log(`showHandAndXiangshang called, hand active: ${this.hand?.active}, xiangshang active: ${this.xiangshang?.active}`);
-        
         if (!this.isFirstBodyGuided) {
             this.isFirstBodyGuided = true;
-            console.log('First body guide completed, switching to normal mode');
         }
         
         if (this.hand) {
             this.hand.active = true;
             this.startHandFloat();
-            console.log('Hand shown with float animation');
-        } else {
-            console.log('Hand node is null');
         }
         
         if (this.xiangshang) {
             this.xiangshang.active = true;
-            console.log('Xiangshang shown');
-        } else {
-            console.log('Xiangshang node is null');
+            this.unschedule(this.xiangshangColorCycle);
+            this.initXiangshangColor();
+            this.schedule(() => this.xiangshangColorCycle(), 0.6);
         }
+    }
+
+    showHandAfterIdle() {
+        if (this.isMoving) return;
+        if (this.isGirlWalking) return;
+        if (this.currentBodyIndex >= 9 || this.bodySequenceIndex > 9) return;
+        this.showHandAndXiangshang();
     }
 
     hideHandAndXiangshang() {
         if (this.hand) this.hand.active = false;
-        if (this.xiangshang) this.xiangshang.active = false;
-        console.log('Hand and xiangshang hidden');
+        if (this.xiangshang) {
+            this.xiangshang.active = false;
+            this.unschedule(this.xiangshangColorCycle);
+        }
+    }
+
+    initXiangshangColor() {
+        this.xiangshangSprites = [];
+        this.xiangshangFrames = [];
+        for (let i = 1; i <= 4; i++) {
+            const child = this.xiangshang!.getChildByName(String(i));
+            if (child) {
+                const sp = child.getComponent(Sprite);
+                if (sp && sp.spriteFrame) {
+                    this.xiangshangSprites.push(sp);
+                    this.xiangshangFrames.push(sp.spriteFrame);
+                }
+            }
+        }
+        this.xiangshangColorIndex = 0;
+        this.doXiangshangSwap();
+    }
+
+    xiangshangColorCycle() {
+        this.xiangshangColorIndex = (this.xiangshangColorIndex + 1) % 4;
+        this.doXiangshangSwap();
+    }
+
+    doXiangshangSwap() {
+        const n = this.xiangshangSprites.length;
+        for (let i = 0; i < n; i++) {
+            const srcIdx = (i + this.xiangshangColorIndex) % n;
+            this.xiangshangSprites[i].spriteFrame = this.xiangshangFrames[srcIdx];
+        }
     }
 
     hideAllDhkImages() {
         if (!this.dhk) return;
-        
-        this.dhk.children.forEach(child => {
-            child.active = false;
-        });
-        
-        console.log('All dhk images hidden');
+        this.dhk.children.forEach(child => { child.active = false; });
     }
 
     getBodyPrefab(index: number): Prefab | null {
@@ -370,10 +390,8 @@ export class GameController extends Component {
             resources.load(`pre/body${index}`, Prefab, (err, prefab) => {
                 if (!err && prefab) {
                     this.bodyPrefabCache[index] = prefab;
-                    console.log(`Body${index} prefab loaded dynamically`);
                     resolve(prefab);
                 } else {
-                    console.error(`Failed to load body${index} prefab:`, err);
                     resolve(null);
                 }
             });
@@ -391,22 +409,13 @@ export class GameController extends Component {
 
     preloadAllTouXiang() {
         resources.loadDir('ui/头像', SpriteFrame, (err, assets) => {
-            if (err) {
-                console.error('❌ Failed to loadDir ui/头像:', err);
-                return;
-            }
-            console.log(`✅ Loaded ${assets.length} TouXiang sprites`);
+            if (err) return;
             assets.forEach((sf: SpriteFrame) => {
                 const name = sf.name || '';
                 const match = name.match(/(\d+)/);
                 if (match) {
                     const num = parseInt(match[1]);
-                    if (num >= 1 && num <= 9) {
-                        this.cachedTouXiang[num] = sf;
-                        console.log(`✅ Cached TouXiang[${num}] from file: ${name}`);
-                    }
-                } else {
-                    console.log(`⚠️ TouXiang file without number: ${name}`);
+                    if (num >= 1 && num <= 9) this.cachedTouXiang[num] = sf;
                 }
             });
         });
@@ -414,40 +423,27 @@ export class GameController extends Component {
 
     preloadAllNames() {
         resources.loadDir('ui/喜好', SpriteFrame, (err, assets) => {
-            if (err) {
-                console.error('❌ Failed to loadDir ui/喜好:', err);
-                return;
-            }
-            console.log(`✅ Loaded ${assets.length} Name sprites`);
+            if (err) return;
             assets.forEach((sf: SpriteFrame) => {
                 const name = sf.name || '';
                 const match = name.match(/^(\d+)$/);
                 if (match) {
                     const num = parseInt(match[1]);
-                    if (num >= 1 && num <= 9) {
-                        this.cachedName[`name_${num}`] = sf;
-                        console.log(`✅ Cached Name[${num}] from file: ${name}`);
-                    }
+                    if (num >= 1 && num <= 9) this.cachedName[`name_${num}`] = sf;
                 }
             });
         });
     }
 
     getNextBodyIndex(): number {
-        if (this.bodySequenceIndex > 9) {
-            return 9;
-        }
+        if (this.bodySequenceIndex > 9) return 9;
         const index = this.bodySequenceIndex;
         this.bodySequenceIndex++;
-        console.log(`Next body index: ${index}`);
         return index;
     }
 
     async createBody(index: number, inheritPosition: Vec3 = null) {
-        if (!this.body) {
-            console.error('Body node not found!');
-            return;
-        }
+        if (!this.body) return;
 
         const isFirstCreate = !this.currentBody && !inheritPosition && index === 1;
 
@@ -473,62 +469,48 @@ export class GameController extends Component {
             
             if (!isFirstCreate && newPosition) {
                 this.currentBody.setPosition(newPosition);
-                console.log(`body${index} created at position: ${newPosition}`);
+                this.bodyExtraYOffset = (index === 5 || index === 6 || index === 7) ? 31.2 : 0;
+                if (this.bodyExtraYOffset > 0) {
+                    const pos = this.currentBody.getPosition();
+                    this.currentBody.setPosition(pos.x, pos.y + this.bodyExtraYOffset, pos.z);
+                }
             } else {
-                console.log(`body${index} created at prefab default position`);
+                this.bodyExtraYOffset = 0;
             }
             
             this.currentBodyIndex = index;
             this.lastBodyPosition.set(this.currentBody.getPosition());
             
             const skeleton = this.currentBody.getComponent(sp.Skeleton);
-            if (skeleton) {
-                skeleton.setAnimation(0, 'animation', true);
-                console.log(`body${index} playing idle animation`);
-            }
-        } else {
-            console.error(`body${index} prefab not found!`);
+            if (skeleton) skeleton.setAnimation(0, 'animation', true);
         }
     }
 
     recordPositions() {
-        if (!this.bg) {
-            console.error('BG node not found!');
-            return;
-        }
+        if (!this.bg) return;
 
         const bgChildren = this.bg.children;
         for (let i = 0; i < Math.min(3, bgChildren.length); i++) {
             const child = bgChildren[i];
             this.bgChildrenPositions.set(child.name, child.getPosition().clone());
-            console.log(`Recorded position of ${child.name}: ${child.getPosition()}`);
         }
 
-        if (this.currentBody) {
-            this.bodyPosition = this.currentBody.getPosition().clone();
-            console.log(`Recorded body position: ${this.bodyPosition}`);
-        }
-
-        if (this.qiang) {
-            this.qiangPosition = this.qiang.getPosition().clone();
-            console.log(`Recorded qiang position: ${this.qiangPosition}`);
-        }
-
-        if (this.dimian) {
-            this.dimianPosition = this.dimian.getPosition().clone();
-            console.log(`Recorded dimian position: ${this.dimianPosition}`);
-        }
-
-        if (this.yinzi) {
-            this.yinziPosition = this.yinzi.getPosition().clone();
-            console.log(`Recorded yinzi position: ${this.yinziPosition}`);
-        }
+        if (this.currentBody) this.bodyPosition = this.currentBody.getPosition().clone();
+        if (this.qiang) this.qiangPosition = this.qiang.getPosition().clone();
+        if (this.dimian) this.dimianPosition = this.dimian.getPosition().clone();
+        if (this.yinzi) this.yinziPosition = this.yinzi.getPosition().clone();
     }
 
     setupEvents() {
-        this.node.on(Node.EventType.TOUCH_START, this.onTouchStart, this);
-        this.node.on(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
-        this.node.on(Node.EventType.TOUCH_END, this.onTouchEnd, this);
+        if (this.mainUI) {
+            this.mainUI.on(Node.EventType.TOUCH_START, this.onTouchStart, this);
+            this.mainUI.on(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
+            this.mainUI.on(Node.EventType.TOUCH_END, this.onTouchEnd, this);
+        } else {
+            this.node.on(Node.EventType.TOUCH_START, this.onTouchStart, this);
+            this.node.on(Node.EventType.TOUCH_MOVE, this.onTouchMove, this);
+            this.node.on(Node.EventType.TOUCH_END, this.onTouchEnd, this);
+        }
 
         if (this.hand) {
             const handButton = this.hand.getComponent(Button);
@@ -550,30 +532,61 @@ export class GameController extends Component {
                 noButton.node.on(Button.EventType.CLICK, this.onNoClick, this);
             }
         }
+
+        if (this.btnTest) {
+            const testButton = this.btnTest.getComponent(Button);
+            if (testButton) {
+                testButton.node.on(Button.EventType.CLICK, this.onBtnTestClick, this);
+            }
+        }
+
+        if (this.btnIcon) {
+            const btnIconButton = this.btnIcon.getComponent(Button);
+            if (btnIconButton) {
+                btnIconButton.node.on(Button.EventType.CLICK, this.onBtnIconClick, this);
+            }
+        }
+
+        if (this.heimu) {
+            const heimuButton = this.heimu.getComponent(Button);
+            if (heimuButton) {
+                heimuButton.node.on(Button.EventType.CLICK, this.onHeimuClick, this);
+            }
+        }
+
+        if (this.big) {
+            const bigButton = this.big.getComponent(Button);
+            if (bigButton) {
+                bigButton.node.on(Button.EventType.CLICK, this.onBigClick, this);
+            }
+        }
     }
 
+    private touchStartY: number = 0;
+
     onTouchStart(event: EventTouch) {
-        console.log('Touch started');
+        this.touchStartY = event.getUILocation().y;
     }
 
     onTouchMove(event: EventTouch) {
-        const delta = event.getDeltaY();
-        if (Math.abs(delta) > 10 && !this.isMoving) {
+        if (!this.canSwipe) return;
+        
+        const currentY = event.getUILocation().y;
+        const totalDelta = Math.abs(this.touchStartY - currentY);
+
+        if (totalDelta > 50 && !this.isMoving) {
             this.incrementSwipeCount();
             this.startMoveUp();
         }
     }
 
-    onTouchEnd(event: EventTouch) {
-        console.log('Touch ended');
-    }
+    onTouchEnd(event: EventTouch) {}
 
     onHandClick() {
-        console.log('Hand clicked');
         if (this.isMoving) {
             this.incrementSwipeCount();
         } else if (this.bodySequenceIndex > 9) {
-            this.openBaidu();
+            this.openStoreLink();
         } else {
             this.swipeCount = 1;
             this.startMoveUp();
@@ -581,10 +594,8 @@ export class GameController extends Component {
     }
 
     onOKClick() {
-        console.log('OK clicked');
-        if (this.isMoving) {
-            this.incrementSwipeCount();
-        } else if (this.bodySequenceIndex > 9) {
+        if (this.isMoving) return;
+        if (this.bodySequenceIndex > 9) {
             this.openBaidu();
         } else {
             this.swipeCount = 1;
@@ -593,33 +604,210 @@ export class GameController extends Component {
     }
 
     openBaidu() {
-        console.log('Opening Baidu...');
-        if (!this.hasOpenedUrl) {
-            this.hasOpenedUrl = true;
-            window.open('https://www.baidu.com', '_blank');
+        this.openStoreLink();
+    }
+
+    onNoClick() {
+        if (this.isMoving) return;
+        this.startGirlWalkSequence();
+    }
+
+    startGirlWalkSequence() {
+        if (this.isGirlWalking) return;
+        this.isGirlWalking = true;
+        
+        this.hideUIForGirlWalk();
+        this.disableSwipe();
+        this.moveGirlToFront();
+    }
+
+    hideUIForGirlWalk() {
+        
+        if (this.okButton) this.okButton.active = false;
+        if (this.noButton) this.noButton.active = false;
+        if (this.hand) this.hand.active = false;
+        if (this.xiangshang) this.xiangshang.active = false;
+        if (this.dianti) this.dianti.active = false;
+        if (this.jianbian) this.jianbian.active = false;
+        if (this.zjhx) this.zjhx.active = false;
+        if (this.btnIcon) this.btnIcon.active = false;
+        
+        this.stopHandFloat();
+        this.unschedule(this.showHandAndXiangshang);
+    }
+
+    disableSwipe() {
+        this.canSwipe = false;
+    }
+
+    moveGirlToFront() {
+        if (!this.girl || !this.yz) return;
+        
+        const skeleton = this.girl.getComponent(sp.Skeleton);
+        if (!skeleton) return;
+        
+        const targetX = this.currentBody ? this.currentBody.getPosition().x - 100 : -200;
+        const startPos = this.girl.getPosition();
+        const yzStartPos = this.yz.getPosition();
+        
+        const duration = 4.5;
+        let elapsedTime = 0;
+        
+        const walkAnim = () => {
+            elapsedTime += 0.016;
+            const progress = Math.min(elapsedTime / duration, 1);
+            const easeProgress = 1 - Math.pow(1 - progress, 3);
+            
+            const currentX = startPos.x + (targetX - startPos.x) * easeProgress;
+            this.girl.setPosition(currentX, startPos.y, startPos.z);
+            
+            if (this.yz) {
+                const yzCurrentX = yzStartPos.x + (targetX - yzStartPos.x) * easeProgress;
+                this.yz.setPosition(yzCurrentX, yzStartPos.y, yzStartPos.z);
+            }
+            
+            if (progress < 1) {
+                requestAnimationFrame(walkAnim);
+            } else {
+                this.onGirlReachedFront();
+            }
+        };
+        
+        skeleton.setAnimation(0, 'walk', true);
+        requestAnimationFrame(walkAnim);
+    }
+
+    onGirlReachedFront() {
+        if (this.girl) {
+            const skeleton = this.girl.getComponent(sp.Skeleton);
+            if (skeleton) {
+                skeleton.setAnimation(0, 'idle', true);
+            }
         }
+        
+        this.scheduleOnce(() => {
+            this.showHeimuAndBig();
+        }, 2);
+    }
+
+    showHeimuAndBig() {
+        if (this.heimu) this.heimu.active = true;
+        if (this.big) this.big.active = true;
+        
+        this.isGirlWalking = false;
+    }
+
+    onBtnTestClick() {}
+
+    openStoreLink() {
+        if (this.storeLinkCooldown) return;
+        
+        this.storeLinkCooldown = true;
+        this.scheduleOnce(() => {
+            this.storeLinkCooldown = false;
+        }, 2);
+
+        const platform = this.detectAdPlatform();
+        const storeUrl = this.getStoreUrl(platform);
+        this.openByPlatform(platform, storeUrl);
+    }
+
+    detectAdPlatform(): string {
+        const w = window as any;
+        if (w.mraid) return 'MRAID';
+        if (w.FBAdBridge || w.FAN || w.FacebookAds) return 'FACEBOOK';
+        if (w.admob || w.google && w.google.ads) return 'GOOGLE';
+        if (w.Tapjoy) return 'TAPJOY';
+        if (w.TTAdSDK || w.tiktok_ad) return 'TIKTOK';
+        if (w.UnityAds || w.unityads) return 'UNITY';
+        return 'UNKNOWN';
+    }
+
+    getStoreUrl(platform: string): string {
+        const storeUrl = 'https://play.google.com/store/apps/details?id=com.huadongqifei.app';
+        return storeUrl;
+    }
+
+    openByPlatform(platform: string, url: string) {
+        const w = window as any;
+
+        switch (platform) {
+            case 'MRAID':
+                if (w.mraid && w.mraid.open) {
+                    w.mraid.open(url);
+                } else {
+                    window.open(url, '_blank');
+                }
+                break;
+            case 'FACEBOOK':
+                if (w.FBAdBridge && w.FBAdBridge.open) {
+                    w.FBAdBridge.open(url);
+                } else {
+                    window.open(url, '_blank');
+                }
+                break;
+            case 'GOOGLE':
+                if (w.admob && w.admob.open) {
+                    w.admob.open(url);
+                } else {
+                    window.open(url, '_blank');
+                }
+                break;
+            case 'TAPJOY':
+                if (w.Tapjoy && w.Tapjoy.open) {
+                    w.Tapjoy.open(url);
+                } else {
+                    window.open(url, '_blank');
+                }
+                break;
+            case 'TIKTOK':
+                if (w.TTAdSDK && w.TTAdSDK.open) {
+                    w.TTAdSDK.open(url);
+                } else {
+                    window.open(url, '_blank');
+                }
+                break;
+            case 'UNITY':
+                if (w.UnityAds && w.UnityAds.open) {
+                    w.UnityAds.open(url);
+                } else {
+                    window.open(url, '_blank');
+                }
+                break;
+            default:
+                window.open(url, '_blank');
+                break;
+        }
+    }
+
+    onBtnIconClick() {
+        this.openStoreLink();
+    }
+
+    onHeimuClick() {
+        this.openStoreLink();
+    }
+
+    onBigClick() {
+        this.openStoreLink();
     }
 
     incrementSwipeCount() {
         this.swipeCount++;
-        console.log(`Swipe count incremented to: ${this.swipeCount}`);
     }
 
     startMoveUp() {
         if (this.isMoving) return;
         
+        this.unschedule(this.showHandAfterIdle);
+        
         if (this.bodySequenceIndex > this.maxSwipeCount) {
-            console.log('Already at last body, opening Baidu');
-            if (!this.hasOpenedUrl) {
-                this.hasOpenedUrl = true;
-                window.open('https://www.baidu.com', '_blank');
-            }
+            this.openStoreLink();
             return;
         }
         
         if (this.isFirstOperation) {
             this.isFirstOperation = false;
-            console.log('First operation');
         }
         
         this.isMoving = true;
@@ -644,45 +832,30 @@ export class GameController extends Component {
         }
         
         this.playFlyAnimation();
-        
-        console.log(`Start moving up. Swipe count: ${this.swipeCount}, Fast loops: ${this.fastLoopTotal}`);
     }
 
     hideTouXiangAndName() {
         if (this.touXiang) this.touXiang.active = false;
         if (this.nameNode) this.nameNode.active = false;
-        console.log('TouXiang and Name hidden');
     }
 
     showTouXiangAndName() {
         if (this.touXiang) this.touXiang.active = true;
         if (this.nameNode) this.nameNode.active = true;
-        console.log('TouXiang and Name shown');
     }
 
     updateTouXiang(bodyIndex: number) {
-        console.log(`[DEBUG] updateTouXiang called with index: ${bodyIndex}`);
-        
-        if (!this.touXiang) {
-            console.warn(`[DEBUG] touXiang node is null!`);
-            return;
-        }
+        if (!this.touXiang) return;
 
         const sprite = this.touXiang.getComponent(Sprite);
-        if (!sprite) {
-            console.warn(`[DEBUG] Sprite component not found on touXiang!`);
-            return;
-        }
+        if (!sprite) return;
 
         const idx = Math.min(Math.max(bodyIndex, 1), 9);
 
         if (this.cachedTouXiang[idx]) {
             sprite.spriteFrame = this.cachedTouXiang[idx];
-            console.log(`✅ TouXiang updated from cache, index ${idx}`);
             return;
         }
-
-        console.log(`⏳ TouXiang ${idx} not in cache yet, retrying...`);
         
         let retryCount = 0;
         const maxRetry = 20;
@@ -693,40 +866,27 @@ export class GameController extends Component {
                 const currentSprite = this.touXiang?.getComponent(Sprite);
                 if (currentSprite && currentSprite.isValid) {
                     currentSprite.spriteFrame = this.cachedTouXiang[idx];
-                    console.log(`✅ TouXiang ${idx} applied after ${retryCount} retries`);
                 }
             } else if (retryCount >= maxRetry) {
                 clearInterval(checkInterval);
-                console.error(`❌ TouXiang ${idx} failed to load after ${maxRetry} retries`);
             }
         }, 100);
     }
 
     updateNameByIndex(nameIndex: number) {
-        console.log(`[DEBUG] updateNameByIndex called with index: ${nameIndex}`);
-        
-        if (!this.nameNode) {
-            console.warn(`[DEBUG] nameNode is null!`);
-            return;
-        }
+        if (!this.nameNode) return;
 
         const idx = Math.min(Math.max(nameIndex, 1), 9);
         this.currentNameIndex = idx;
 
         const sprite = this.nameNode.getComponent(Sprite);
-        if (!sprite) {
-            console.warn(`[DEBUG] Sprite component not found on nameNode!`);
-            return;
-        }
+        if (!sprite) return;
 
         const cacheKey = `name_${idx}`;
         if (this.cachedName[cacheKey]) {
             sprite.spriteFrame = this.cachedName[cacheKey];
-            console.log(`✅ Name updated from cache, index ${idx}`);
             return;
         }
-
-        console.log(`⏳ Name ${idx} not in cache yet, retrying...`);
         
         let retryCount = 0;
         const maxRetry = 20;
@@ -737,11 +897,9 @@ export class GameController extends Component {
                 const currentSprite = this.nameNode?.getComponent(Sprite);
                 if (currentSprite && currentSprite.isValid) {
                     currentSprite.spriteFrame = this.cachedName[cacheKey];
-                    console.log(`✅ Name ${idx} applied after ${retryCount} retries`);
                 }
             } else if (retryCount >= maxRetry) {
                 clearInterval(checkInterval);
-                console.error(`❌ Name ${idx} failed to load after ${maxRetry} retries`);
             }
         }, 100);
     }
@@ -756,27 +914,19 @@ export class GameController extends Component {
     }
 
     playFlyAnimation() {
-        if (!this.girl) {
-            console.log('No girl node found');
-            return;
-        }
+        if (!this.girl) return;
         
         const skeleton = this.girl.getComponent(sp.Skeleton);
-        if (!skeleton) {
-            console.log('No skeleton component found on girl');
-            return;
-        }
-        
-        console.log('Found skeleton on girl node');
+        if (!skeleton) return;
         
         skeleton.setCompleteListener(() => {
-            console.log('Fly complete, switching to idle');
             skeleton.setCompleteListener(null);
+            skeleton.timeScale = 1;
             skeleton.setAnimation(0, 'idle', true);
         });
         
-        const success = skeleton.setAnimation(0, 'fly', false);
-        console.log('Set fly animation result:', success);
+        skeleton.timeScale = 0.9;
+        skeleton.setAnimation(0, 'fly', false);
     }
 
     playGirlFlyOnce() {
@@ -784,8 +934,11 @@ export class GameController extends Component {
         
         if (this.jianbian) {
             this.jianbian.active = false;
-            console.log('Jianbian hidden when girl starts moving');
         }
+        
+        this.stopHandFloat();
+        this.hideHandAndXiangshang();
+        this.unschedule(this.showHandAndXiangshang);
         
         const skeleton = this.girl.getComponent(sp.Skeleton);
         if (!skeleton) return;
@@ -795,11 +948,12 @@ export class GameController extends Component {
         
         skeleton.setCompleteListener(() => {
             skeleton.setCompleteListener(null);
+            skeleton.timeScale = 1;
             skeleton.setAnimation(0, 'idle', true);
         });
         
+        skeleton.timeScale = 0.9;
         skeleton.setAnimation(0, 'fly', false);
-        console.log(`Girl fly animation played for loop ${this.fastLoopCount}`);
     }
 
     update(deltaTime: number) {
@@ -830,7 +984,16 @@ export class GameController extends Component {
                 this.isMoving = false;
                 this.movePhase = 0;
                 this.moveSpeed = 0;
+                
+                if (this.currentBodyIndex >= 9 || this.bodySequenceIndex > 9) {
+                    this.playBounceEffect();
+                    return;
+                }
+                
                 this.playBounceEffect();
+                
+                this.scheduleOnce(this.showHandAfterIdle, 4);
+                
                 return;
             }
         }
@@ -858,7 +1021,6 @@ export class GameController extends Component {
                 const nextIndex = this.getNextBodyIndex();
                 
                 if (nextIndex > 9 || this.bodySequenceIndex > 9) {
-                    console.log('Body index exceeded max, showing last body and opening Baidu');
                     this.isMoving = false;
                     this.fastLoopPhase = false;
                     
@@ -868,11 +1030,6 @@ export class GameController extends Component {
                     if (this.dimian) this.dimian.setPosition(this.dimianPosition);
                     if (this.yinzi) this.yinzi.setPosition(this.yinziPosition);
                     
-                    if (!this.hasOpenedUrl) {
-                        this.hasOpenedUrl = true;
-                       // this.urlOpenCooldown = this.urlCooldownDuration;
-                        window.open('https://www.baidu.com', '_blank');
-                    }
                     return;
                 }
                 
@@ -887,7 +1044,6 @@ export class GameController extends Component {
                         this.bodyPosition.z
                     );
                     await this.createBody(nextIndex, belowPosition);
-                    console.log(`Final body${nextIndex} created, slowing down...`);
                     
                     this.resetNodesToBelow();
                 } else {
@@ -897,7 +1053,6 @@ export class GameController extends Component {
                         this.bodyPosition.z
                     );
                     await this.createBody(nextIndex, belowPosition);
-                    console.log(`Fast loop ${this.fastLoopCount}/${this.fastLoopTotal}, body${nextIndex}`);
                     
                     this.resetNodesToBelow();
                 }
@@ -945,7 +1100,6 @@ export class GameController extends Component {
             if (currentY >= endY) {
                 this.hand.active = false;
                 if (this.xiangshang) this.xiangshang.active = false;
-                console.log('Hand and xiangshang hidden at end position');
             } else {
                 const pos = this.hand.getPosition();
                 this.hand.setPosition(pos.x, pos.y + distance, pos.z);
@@ -954,16 +1108,12 @@ export class GameController extends Component {
     }
 
     playBounceEffect() {
-        console.log(`[DEBUG] playBounceEffect called, currentBodyIndex: ${this.currentBodyIndex}`);
-        
         this.stopHandFloat();
         
         this.swipeCount = 0;
         this.fastLoopTotal = 0;
         
-        console.log(`[DEBUG] About to update TouXiang with index: ${this.currentBodyIndex}`);
         this.updateTouXiang(this.currentBodyIndex);
-        console.log(`[DEBUG] About to update Name with index: ${this.currentBodyIndex}`);
         this.updateNameByIndex(this.currentBodyIndex);
         this.showTouXiangAndName();
         
@@ -971,7 +1121,8 @@ export class GameController extends Component {
         const bounceDown = this.bounceDistance * 0.3;
         
         const nodes = [this.qiang, this.dimian, this.yinzi, this.currentBody].filter(n => n);
-        const positions = [this.qiangPosition, this.dimianPosition, this.yinziPosition, this.bodyPosition];
+        const positions = [this.qiangPosition, this.dimianPosition, this.yinziPosition, 
+            this.currentBody ? new Vec3(this.bodyPosition.x, this.bodyPosition.y + this.bodyExtraYOffset, this.bodyPosition.z) : this.bodyPosition];
         
         nodes.forEach((node, index) => {
             if (!node) return;
@@ -994,24 +1145,11 @@ export class GameController extends Component {
         if (this.hand && this.okButton) {
             const okPos = this.okButton.getPosition();
             const targetPos = new Vec3(okPos.x + 80, okPos.y - 60, okPos.z);
-            
-            this.showRandomDhkImage();
+
             this.hand.setPosition(targetPos);
-            console.log('Hand reset to ok button position');
         }
-        
+
         this.hideHandAndXiangshang();
-        
-        if (this.currentBodyIndex >= 9 || this.bodySequenceIndex > 9) {
-            console.log('At last body, will not show hand again');
-            return;
-        }
-        
-        this.scheduleOnce(() => {
-            if (this.isMoving) return;
-            if (this.currentBodyIndex >= 9 || this.bodySequenceIndex > 9) return;
-            this.showHandAndXiangshang();
-        }, 4);
     }
 
     showRandomDhkImage() {
@@ -1020,24 +1158,17 @@ export class GameController extends Component {
         const children = this.dhk.children;
         if (children.length === 0) return;
         
-        children.forEach(child => {
-            child.active = false;
-        });
+        children.forEach(child => { child.active = false; });
         
         const randomIndex = Math.floor(Math.random() * children.length);
         children[randomIndex].active = true;
         
-        console.log(`Showing random dhk image: ${children[randomIndex].name}`);
-        
         this.scheduleOnce(() => {
             children[randomIndex].active = false;
-            console.log('Dhk image hidden after 2 seconds');
         }, 2);
     }
 
     async onReachTop() {
-        console.log(`Reached top. Fast loop total: ${this.fastLoopTotal}`);
-        
         if (this.fastLoopTotal <= 0) {
             this.movePhase = 2;
             const belowPosition = new Vec3(
@@ -1047,7 +1178,6 @@ export class GameController extends Component {
             );
             await this.createBody(this.getNextBodyIndex(), belowPosition);
             this.resetNodesToBelow();
-            console.log('No fast loop, entering deceleration phase');
             return;
         }
         
@@ -1061,31 +1191,17 @@ export class GameController extends Component {
             this.bodyPosition.z
         );
         await this.createBody(nextIndex, belowPosition);
-        console.log(`Fast loop started with body${nextIndex}`);
         
         this.resetNodesToBelow();
     }
 
     onMoveComplete() {
-        console.log('Move complete, returning to initial positions...');
-        
-        if (this.qiang) {
-            this.qiang.setPosition(this.qiangPosition);
-        }
-
-        if (this.dimian) {
-            this.dimian.setPosition(this.dimianPosition);
-        }
-
-        if (this.yinzi) {
-            this.yinzi.setPosition(this.yinziPosition);
-        }
-
+        if (this.qiang) this.qiang.setPosition(this.qiangPosition);
+        if (this.dimian) this.dimian.setPosition(this.dimianPosition);
+        if (this.yinzi) this.yinzi.setPosition(this.yinziPosition);
         if (this.currentBody) {
-            this.currentBody.setPosition(this.bodyPosition);
+            this.currentBody.setPosition(this.bodyPosition.x, this.bodyPosition.y + this.bodyExtraYOffset, this.bodyPosition.z);
         }
-        
-        console.log(`Current body index: ${this.currentBodyIndex}`);
     }
 
     startHandSwipeGuide() {
@@ -1097,11 +1213,9 @@ export class GameController extends Component {
         if (this.frist && this.end) {
             startPos = this.frist.getPosition().clone();
             endPos = this.end.getPosition().clone();
-            console.log(`Using frist(${startPos}) to end(${endPos}) for hand guide`);
         } else {
             startPos = this.handOriginalPosition.clone();
             endPos = new Vec3(startPos.x, startPos.y + 80, startPos.z);
-            console.warn('frist/end nodes not found, using fallback positions');
         }
         
         this.hand.setPosition(startPos);
@@ -1109,12 +1223,9 @@ export class GameController extends Component {
         this.handFloatTween = tween(this.hand)
             .to(0.8, { position: endPos }, { easing: 'quadOut' })
             .to(0.4, { position: startPos }, { easing: 'quadIn' })
-            .call(() => console.log('Hand swipe guide at frist'))
             .union()
             .repeatForever()
             .start();
-        
-        console.log('Hand swipe guide animation started');
     }
 
     startHandFloat() {
@@ -1134,8 +1245,6 @@ export class GameController extends Component {
             .union()
             .repeatForever()
             .start();
-        
-        console.log('Hand float animation started');
     }
 
     stopHandFloat() {
@@ -1154,7 +1263,5 @@ export class GameController extends Component {
         tween(this.hand)
             .to(0.3, { position: targetPos }, { easing: 'backOut' })
             .start();
-        
-        console.log('Hand moved to xiangshang position');
     }
 }
