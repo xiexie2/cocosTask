@@ -1,0 +1,20 @@
+
+Boy9.png
+size: 512,512
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+n9_1
+  rotate: false
+  xy: 219, 216
+  size: 203, 206
+  orig: 203, 206
+  offset: 0, 0
+  index: -1
+n9_2
+  rotate: false
+  xy: 2, 2
+  size: 215, 420
+  orig: 215, 420
+  offset: 0, 0
+  index: -1
