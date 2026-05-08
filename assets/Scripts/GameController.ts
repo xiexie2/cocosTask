@@ -130,6 +130,9 @@ export class GameController extends Component {
     private readonly designWidth: number = 750;
     private readonly designHeight: number = 1334;
     
+    private cachedPlatform: string = '';
+    private isMraidReady: boolean = false;
+    
     onLoad() {
         this.applyPortraitViewport();
         this.setupEvents();
@@ -139,6 +142,8 @@ export class GameController extends Component {
         this.preloadAllTouXiang();
         this.preloadAllNames();
         this.startButtonScaleAnim();
+        
+        this.detectAndCachePlatform();
     }
 
     onDestroy() {
@@ -609,7 +614,13 @@ export class GameController extends Component {
 
     onNoClick() {
         if (this.isMoving) return;
-        this.startGirlWalkSequence();
+        
+        if (this.currentBodyIndex === 1) {
+            this.swipeCount = 1;
+            this.startMoveUp();
+        } else {
+            this.startGirlWalkSequence();
+        }
     }
 
     startGirlWalkSequence() {
@@ -699,6 +710,34 @@ export class GameController extends Component {
 
     onBtnTestClick() {}
 
+    detectAndCachePlatform() {
+        this.cachedPlatform = this.detectAdPlatform();
+        
+        const w = window as any;
+        if (w.mraid && w.mraid.getState) {
+            const checkMraidReady = () => {
+                try {
+                    const state = w.mraid.getState();
+                    if (state === 'default' || state === 'loading') {
+                        this.isMraidReady = true;
+                    } else {
+                        setTimeout(checkMraidReady, 100);
+                    }
+                } catch (e) {
+                    this.isMraidReady = false;
+                }
+            };
+            
+            if (w.mraid.isReady && typeof w.mraid.isReady === 'function') {
+                w.mraid.isReady(() => {
+                    this.isMraidReady = true;
+                });
+            } else {
+                setTimeout(checkMraidReady, 500);
+            }
+        }
+    }
+
     openStoreLink() {
         if (this.storeLinkCooldown) return;
         
@@ -707,9 +746,24 @@ export class GameController extends Component {
             this.storeLinkCooldown = false;
         }, 2);
 
-        const platform = this.detectAdPlatform();
+        this.showInstantFeedback();
+        
+        const platform = this.cachedPlatform || this.detectAdPlatform();
         const storeUrl = this.getStoreUrl(platform);
-        this.openByPlatform(platform, storeUrl);
+        
+        requestAnimationFrame(() => {
+            this.openByPlatform(platform, storeUrl);
+        });
+    }
+    
+    showInstantFeedback() {
+        const buttons = [this.btnIcon, this.big, this.heimu].filter(btn => btn && btn.active);
+        buttons.forEach(btn => {
+            tween(btn)
+                .to(0.1, { scale: new Vec3(0.95, 0.95, 1) })
+                .to(0.1, { scale: new Vec3(1, 1, 1) })
+                .start();
+        });
     }
 
     detectAdPlatform(): string {
@@ -733,43 +787,56 @@ export class GameController extends Component {
 
         switch (platform) {
             case 'MRAID':
-                if (w.mraid && w.mraid.open) {
-                    w.mraid.open(url);
+                if (w.mraid && w.mraid.open && this.isMraidReady) {
+                    try {
+                        w.mraid.open(url);
+                    } catch (e) {
+                        console.warn('MRAID open failed, fallback to window.open');
+                        window.open(url, '_blank');
+                    }
+                } else if (w.mraid && w.mraid.open) {
+                    setTimeout(() => {
+                        try {
+                            w.mraid.open(url);
+                        } catch (e) {
+                            window.open(url, '_blank');
+                        }
+                    }, 200);
                 } else {
                     window.open(url, '_blank');
                 }
                 break;
             case 'FACEBOOK':
                 if (w.FBAdBridge && w.FBAdBridge.open) {
-                    w.FBAdBridge.open(url);
+                    try { w.FBAdBridge.open(url); } catch (e) { window.open(url, '_blank'); }
                 } else {
                     window.open(url, '_blank');
                 }
                 break;
             case 'GOOGLE':
                 if (w.admob && w.admob.open) {
-                    w.admob.open(url);
+                    try { w.admob.open(url); } catch (e) { window.open(url, '_blank'); }
                 } else {
                     window.open(url, '_blank');
                 }
                 break;
             case 'TAPJOY':
                 if (w.Tapjoy && w.Tapjoy.open) {
-                    w.Tapjoy.open(url);
+                    try { w.Tapjoy.open(url); } catch (e) { window.open(url, '_blank'); }
                 } else {
                     window.open(url, '_blank');
                 }
                 break;
             case 'TIKTOK':
                 if (w.TTAdSDK && w.TTAdSDK.open) {
-                    w.TTAdSDK.open(url);
+                    try { w.TTAdSDK.open(url); } catch (e) { window.open(url, '_blank'); }
                 } else {
                     window.open(url, '_blank');
                 }
                 break;
             case 'UNITY':
                 if (w.UnityAds && w.UnityAds.open) {
-                    w.UnityAds.open(url);
+                    try { w.UnityAds.open(url); } catch (e) { window.open(url, '_blank'); }
                 } else {
                     window.open(url, '_blank');
                 }

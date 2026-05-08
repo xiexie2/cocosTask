@@ -1,0 +1,49 @@
+{
+  "timestamp": "2026-05-08T01:13:52.957Z",
+  "project": "HuaDongQiFei",
+  "version": "3.8.8",
+  "configurations": {
+    "netlify": {
+      "gzipCompression": true,
+      "cacheControl": "1 year immutable",
+      "headers": [
+        "JS",
+        "PNG",
+        "Atlas",
+        "JSON",
+        "MP3"
+      ]
+    },
+    "gameFeatures": {
+      "firstBodyNoButtonSwipe": true,
+      "loadingScreen": true,
+      "progressBar": true,
+      "mraidSupport": true
+    },
+    "optimization": {
+      "webpConversion": false,
+      "imageCompression": false,
+      "spineOptimization": false
+    },
+    "buildTemplates": {
+      "customIndexEjs": true,
+      "loadingScreen": "HuaDongQiFei branded",
+      "responsiveDesign": true
+    }
+  },
+  "filesModified": [
+    "assets/Scripts/GameController.ts - 第一个body的NO按钮触发滑动",
+    "build-templates/web-mobile/index.ejs - 自定义Loading界面",
+    "netlify.toml - Gzip压缩和缓存策略 (根目录)",
+    "mraid-package/netlify.toml - Gzip压缩和缓存策略 (部署目录)",
+    "OPTIMIZATION_GUIDE.md - 完整优化指南文档"
+  ],
+  "scriptsAvailable": [
+    "compress-images.js - PNG/JPG压缩",
+    "convert-to-webp.js - WebP格式转换",
+    "compress-strong.js - 强力压缩",
+    "post-build-config.js - 本脚本 (构建后自动应用配置)",
+    "deploy-web.bat - 部署工具",
+    "build-mraid.bat - MRAID广告构建"
+  ]
+}
