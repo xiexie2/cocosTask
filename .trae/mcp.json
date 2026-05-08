@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "cocos": {
-      "command": "node",
-      "args": ["e:\\Cocos\\Hdqf\\HuaDongQiFei\\mcp-server.js"]
-    }
-  }
-}

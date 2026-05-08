@@ -1,9 +1,0 @@
-{
-  "name": "cocos-mcp-standalone",
-  "version": "1.0.0",
-  "description": "Cocos MCP Standalone Server",
-  "main": "mcp-server.js",
-  "scripts": {
-    "start": "node mcp-server.js"
-  }
-}
